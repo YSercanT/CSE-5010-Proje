@@ -1,0 +1,9 @@
+# Python dependencies
+flask
+flask-cors
+pandas
+numpy
+tensorflow
+scikit-learn
+requests
+scipy

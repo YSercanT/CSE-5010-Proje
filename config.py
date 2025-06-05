@@ -1,0 +1,1 @@
+# Konfigürasyon ayarları

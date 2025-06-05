@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KDD Karar Destek Sistemi</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.10.0/tf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.0/axios.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Karar Destek Sistemi</h1>
+            <p></p>
+        </div>
+
+        <div class="main-content">
+            <div class="step">
+                <div class="step-title">
+                    <div class="step-number">1</div>
+                    <span>Model Seçimi</span>
+                </div>
+                <div class="model-grid">
+                    <div class="model-card" data-model="sercan">
+                        <div class="model-name">Sercan Model</div>
+                        <div class="model-description">Sercan tarafından geliştirilen classification modeli - Hepatitis
+                            C egyptian data için özelleştirilmiştir.</div>
+                    </div>
+                    <div class="model-card" data-model="suheyla">
+                        <div class="model-name">Süheyla Model</div>
+                        <div class="model-description"></div>
+                    </div>
+                    <div class="model-card" data-model="atakan">
+                        <div class="model-name">Atakan Model</div>
+                        <div class="model-description"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-title">
+                    <div class="step-number">2</div>
+                    <span>Veri Yükleme</span>
+                </div>
+                <div class="file-upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                    <div class="upload-icon">📁</div>
+                    <h3>Dosyanızı Sürükleyin veya Seçin</h3>
+                    <p>CSV, Excel (.xlsx, .xls) veya metin dosyası yükleyebilirsiniz</p>
+                    <input type="file" id="fileInput" class="file-input" accept=".csv,.xlsx,.xls,.txt"
+                        onchange="handleFileSelect(event); event.preventDefault(); return false;"> <button class="btn"
+                        onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+                        Dosya Seç
+                    </button>
+                </div>
+
+                <div id="dataPreview" class="data-preview" style="display: none;">
+                    <h3>📊 Veri Önizleme</h3>
+                    <div id="dataInfo"></div>
+                    <div id="columnSelector" class="column-selector"></div>
+
+                    <div class="table-container">
+                        <table id="previewTable" class="preview-table"></table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-title">
+                    <div class="step-number">3</div>
+                    <span>Analiz ve Sonuçlar</span>
+                </div>
+                <button id="analyzeBtn" class="btn" disabled>
+                    🚀 Analizi Başlat
+                </button>
+
+                <div id="analysisResults" class="results-section" style="display: none;">
+                    <div id="loadingIndicator" class="loading">
+                        <div class="spinner"></div>
+                        <span>Model analiz ediyor...</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                    <div id="resultsContent"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+
+</html>
