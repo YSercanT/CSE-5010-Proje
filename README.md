@@ -1,1 +1,2 @@
-# Karar Destek Sistemi Backend
+# Karar Destek Sistemi 
+madels içindeki fonksiyonları doldursanız yeterli orada yaptığınız işlemler  app.py ile çalıştırılıyor 
