@@ -484,7 +484,6 @@ function displayResults(results) {
                         <h3>🎯 ${results.modelName} Sonuçları</h3>
                         <div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
                             <strong>Target Sütunu:</strong> ${results.targetColumn}<br>
-                            <strong>Özel Özellik:</strong> ${results.specialFeature}
                         </div>
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0;">
                             <div style="background: white; padding: 20px; border-radius: 10px; text-align: center;">
