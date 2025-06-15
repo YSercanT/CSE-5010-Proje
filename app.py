@@ -89,16 +89,11 @@ def initialize_atakan_model():
     global atakan_model_instance
     try:
         atakan_model_instance = AtakanModel(
-            model_path=os.path.join(MODELS_FILE_PATH, "rf.pkl"), #model yolu 
-            scaler_path=os.path.join(SCALERS_FILE_PATH, "min_max_scaler_sercan.pkl") #normalizasyon yolu  
-       
+            model_path=os.path.join(MODELS_FILE_PATH, "mlp_model.pkl"), #model yolu 
+            scaler_path=os.path.join(SCALERS_FILE_PATH, "atakan_scaler.pkl"), #normalizasyon yolu  
+       encoder_path=os.path.join(MODELS_FILE_PATH, "label_encoder.pkl") # Label yolu
         )
-        scaler_path = os.path.join(SCALERS_FILE_PATH, "min_max_scaler_sercan.pkl")
-        model_path = os.path.join(MODELS_FILE_PATH, "rf.pkl")
-        print(f"Model path: {model_path}")
-        print(f"Scaler path: {scaler_path}")
-        print(f"Model exists: {os.path.exists(model_path)}")
-        print(f"Scaler exists: {os.path.exists(scaler_path)}")    
+       
         atakan_model_instance.load_model()
         print("Atakan model instance oluşturuldu!")
         return True
@@ -238,30 +233,28 @@ def format_results(df, y_pred, model_instance):
         y_true = getattr(model_instance, "y", None)
         if y_true is None:
             raise Exception("True y couldn't find in model")
-        print(f"y_true:{y_true}")
 
-        # Mapping tablosunu burada da uygulayalım
-        mapping = {
-            '0=Blood Donor': 0,
-            '1=Hepatitis': 1,
-            '2=Fibrosis': 2,
-            '3=Cirrhosis': 3
-        }
-
-        # Eğer y_true hâlâ string ise mapping uygula
-        if isinstance(y_true.iloc[0], str):
-            y_true_mapped = y_true.map(mapping)
+        # Eğer modelin içinde LabelEncoder varsa --> Atakan modeli
+        if hasattr(model_instance, "le") and model_instance.le is not None:
+            y_true_encoded = model_instance.le.transform(y_true)
         else:
-            y_true_mapped = y_true  # zaten int ise dokunma
+            # Suheyla modeli --> mapping uygula
+            mapping = {
+                '0=Blood Donor': 0,
+                '1=Hepatitis': 1,
+                '2=Fibrosis': 2,
+                '3=Cirrhosis': 3
+            }
+            y_true_encoded = y_true.map(mapping)
 
         target_col_name = getattr(model_instance, "target_column", "Unknown")
 
-        accuracy = accuracy_score(y_true_mapped, y_pred)
+        accuracy = accuracy_score(y_true_encoded, y_pred)
         class_dist = pd.Series(y_pred).value_counts().to_dict()
 
         detailed = df.copy()
         detailed["prediction"] = y_pred
-        detailed["true"] = y_true_mapped  # mapped olanı ekleyelim
+        detailed["true"] = y_true_encoded
 
         actual_vs_predicted = [
             {
@@ -269,13 +262,12 @@ def format_results(df, y_pred, model_instance):
                 "predicted": int(pred),
                 "correct": int(true) == int(pred)
             }
-            for true, pred in zip(y_true_mapped, y_pred)
+            for true, pred in zip(y_true_encoded, y_pred)
         ]
-        print("First actual vs predicted item:", actual_vs_predicted[0])
-        print("Keys:", actual_vs_predicted[0].keys())
+
         return {
             "accuracy": round(accuracy, 4),
-            "total_samples": len(y_true_mapped),
+            "total_samples": len(y_true_encoded),
             "class_distribution": class_dist,
             "target_column": target_col_name,
             "description": f"Model '{model_instance.__class__.__name__}' için sonuçlar",
@@ -289,6 +281,7 @@ def format_results(df, y_pred, model_instance):
         return {
             "error": str(e)
         }
+
 def startup_models():
     print("Models are initalizing...")
     
