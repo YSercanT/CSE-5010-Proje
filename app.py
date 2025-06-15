@@ -110,18 +110,12 @@ def initialize_suheyla_model():
     global suheyla_model_instance
     try:
         suheyla_model_instance = SuheylaModel(
-            model_path=os.path.join(MODELS_FILE_PATH, "rf.pkl"),  #model yolu
-            scaler_path=os.path.join(SCALERS_FILE_PATH, "min_max_scaler_sercan.pkl") # normalizasyon yolu  
+            model_path=os.path.join(MODELS_FILE_PATH, "HCV600_svm_model.pkl"),  #model yolu
+            scaler_path=os.path.join(SCALERS_FILE_PATH, "HCV600_scaler.pkl") # normalizasyon yolu  
        
         )
-        scaler_path = os.path.join(SCALERS_FILE_PATH, "min_max_scaler_sercan.pkl")
-        model_path = os.path.join(MODELS_FILE_PATH, "rf.pkl")
-        print(f"Model path: {model_path}")
-        print(f"Scaler path: {scaler_path}")
-        print(f"Model exists: {os.path.exists(model_path)}")
-        print(f"Scaler exists: {os.path.exists(scaler_path)}")    
+           
         suheyla_model_instance.load_model()
-        print("Süheyla model instance oluşturuldu!")
         return True
     except Exception as e:
         print(f"Süheyla model başlatma hatası: {e}")
@@ -184,6 +178,9 @@ def run_suheyla_model():
         final_predictions = suheyla_model_instance.postprocess_output(predictions)
         
         results = format_results(df, final_predictions, suheyla_model_instance)
+        print("df")
+        print(df)
+        print(f"final : {final_predictions}")
         
         print(f"Süheyla modeli build successfully! Accuracy: {results.get('accuracy', 'N/A')}")
         return results
@@ -241,15 +238,30 @@ def format_results(df, y_pred, model_instance):
         y_true = getattr(model_instance, "y", None)
         if y_true is None:
             raise Exception("True y couldn't find in model")
+        print(f"y_true:{y_true}")
+
+        # Mapping tablosunu burada da uygulayalım
+        mapping = {
+            '0=Blood Donor': 0,
+            '1=Hepatitis': 1,
+            '2=Fibrosis': 2,
+            '3=Cirrhosis': 3
+        }
+
+        # Eğer y_true hâlâ string ise mapping uygula
+        if isinstance(y_true.iloc[0], str):
+            y_true_mapped = y_true.map(mapping)
+        else:
+            y_true_mapped = y_true  # zaten int ise dokunma
 
         target_col_name = getattr(model_instance, "target_column", "Unknown")
 
-        accuracy = accuracy_score(y_true, y_pred)
+        accuracy = accuracy_score(y_true_mapped, y_pred)
         class_dist = pd.Series(y_pred).value_counts().to_dict()
 
         detailed = df.copy()
         detailed["prediction"] = y_pred
-        detailed["true"] = y_true
+        detailed["true"] = y_true_mapped  # mapped olanı ekleyelim
 
         actual_vs_predicted = [
             {
@@ -257,13 +269,13 @@ def format_results(df, y_pred, model_instance):
                 "predicted": int(pred),
                 "correct": int(true) == int(pred)
             }
-            for true, pred in zip(y_true, y_pred)
+            for true, pred in zip(y_true_mapped, y_pred)
         ]
         print("First actual vs predicted item:", actual_vs_predicted[0])
         print("Keys:", actual_vs_predicted[0].keys())
         return {
             "accuracy": round(accuracy, 4),
-            "total_samples": len(y_true),
+            "total_samples": len(y_true_mapped),
             "class_distribution": class_dist,
             "target_column": target_col_name,
             "description": f"Model '{model_instance.__class__.__name__}' için sonuçlar",
@@ -277,7 +289,6 @@ def format_results(df, y_pred, model_instance):
         return {
             "error": str(e)
         }
-    
 def startup_models():
     print("Models are initalizing...")
     
@@ -288,7 +299,7 @@ def startup_models():
         os.makedirs(SCALERS_FILE_PATH, exist_ok=True)
         
         # Modelleri başlat
-        initialize_sercan_model()
+        #initialize_sercan_model()
         initialize_suheyla_model()
         initialize_atakan_model()
         

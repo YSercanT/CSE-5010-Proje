@@ -58,21 +58,24 @@ class SuheylaModel(BaseModel):
                 self.scaler = None
         else:
             print("Scaler path not found, will use default normalization")
-    def feature_extraction(self, X):
-     
-        print("Feature extraction (training pipeline match)...")
-        df = X.copy()
+    def feature_extraction(self, df):
+        df['AST_ALT_Ratio'] = df['AST'] / df['ALT']
+        df['AST_ALT_Ratio'].replace([np.inf, -np.inf], np.nan, inplace=True)
+        df['AST_ALT_Ratio'].fillna(0, inplace=True)  
+        #print("Feature extraction (training pipeline match)...")
+        #df = X.copy()
         
         return df
 
     
 
     def feature_reduction(self, X):
-        
+        selected_features = ['ALB', 'AST', 'ALP','BIL', 'Age', 'AST_ALT_Ratio']
+        X = X[selected_features]
         return X
         
     def normalization(self, X):
-        
+        X=self.scaler.transform(X)
         return X
 
     def validate_input(self, X):
@@ -85,35 +88,59 @@ class SuheylaModel(BaseModel):
    
     def prediction(self, X, **kwargs):
         # self.target_column 
+        self.target_column="Category"
         #self.y=x[""]
-        #X=X.drop(colums="", inplace=true)
-        self.y=X['Baselinehistological staging'] #test
-        #X_cleaned = self.data_cleaning(X)
-        #X_features = self.feature_extraction(X_cleaned)
-        #X_reduced = self.feature_reduction(X_features)
-        #X_normalized = self.normalization(X_reduced)
+        self.y=X["Category"]
+        #
+        X.drop(columns="Category", inplace=True)
+        #self.y=X['Baselinehistological staging'] #test
+        X_cleaned = self.data_cleaning(X)
+        X_features = self.feature_extraction(X_cleaned)
+        X_reduced = self.feature_reduction(X_features)
+        X_normalized = self.normalization(X_reduced)
 
         print("Making predictions...")
-        #raw_predictions = self.model.predict(X_normalized, **kwargs)
-        raw_predictions=self.y #test
+        raw_predictions = self.model.predict(X_normalized, **kwargs)
+        #raw_predictions=self.y #test
+        print(f"Raw: {raw_predictions}")
         print("Predictions completed.")
 
         return raw_predictions
     
     def postprocess_output(self, predictions):
         print("Postprocessing output...")
+        print(self.y)
+        print("a" * 10)
+        print(predictions)
 
-        if predictions.ndim > 1 and predictions.shape[1] > 1:
+        mapping = {
+            '0=Blood Donor': 0,
+            '1=Hepatitis': 1,
+            '2=Fibrosis': 2,
+            '3=Cirrhosis': 3
+        }
+
+        # Tahminler sayısal mı string mi kontrol et
+        if isinstance(predictions[0], (list, np.ndarray)):
+            # Çoklu olasılık vektörü: argmax uygula
             final_preds = np.argmax(predictions, axis=1)
+        elif isinstance(predictions[0], str):
+            # String class label geldi
+            final_preds = pd.Series(predictions).map(mapping).values
         else:
+            # Sayısal class label geldi
             final_preds = predictions.ravel().astype(int)
 
+        # self.y'yi de integer'a çevir
+        y_true = self.y.map(mapping)
+
+        # Değerlendirme
         if hasattr(self, "y") and self.y is not None:
             try:
                 print("Evaluation Results (from postprocess_output):")
-                print("Accuracy:", accuracy_score(self.y, final_preds))
-                print("Confusion Matrix:\n", confusion_matrix(self.y, final_preds))
-                print("Classification Report:\n", classification_report(self.y, final_preds))
+                print("Accuracy:", accuracy_score(y_true, final_preds))
+                print("Confusion Matrix:\n", confusion_matrix(y_true, final_preds))
+                print("Classification Report:\n", classification_report(y_true, final_preds))
             except Exception as e:
                 print(f"Evaluation error in postprocess_output: {e}")
 

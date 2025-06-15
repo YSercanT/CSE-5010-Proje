@@ -53,6 +53,7 @@ class SercanModel(BaseModel):
             self.is_loaded = False
             return False
     def _load_scaler(self):
+        
         if self.scaler_path and os.path.exists(self.scaler_path):
             try:
                 self.scaler = joblib.load(self.scaler_path)
