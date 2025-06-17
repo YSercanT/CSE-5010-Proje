@@ -7,7 +7,7 @@ import os
 import joblib
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 from .base_model import BaseModel
-
+import pickle
 
 
 class SercanModel(BaseModel):
@@ -15,246 +15,112 @@ class SercanModel(BaseModel):
 
     def __init__(self, model_path=None, scaler_path=None, **kwargs):
         super().__init__(model_path, **kwargs)
-        self.scaler_path = scaler_path
-        self.scaler = None
-        self.categorical_columns = [
-    "Gender", "Fever", "Nausea/Vomting", "Headache",
-    "Fatigue & generalized bone ache", "Jaundice",
-    "Diarrhea", "Epigastric pain", "Baseline histological Grading"
-]
-        self._load_scaler()
-        self._load_model()
-    def _load_model(self):
-        try:
-            print(f"Sercan model uploading: {self.model_path}")
-            
-            if not self.model_path:
-                raise ValueError("Path couldnt found!")
-            
-            if not os.path.exists(self.model_path):
-                raise FileNotFoundError(f"Model file couldnt found: {self.model_path}")
-            
-            self.model = joblib.load(self.model_path)
-            self.is_loaded = True
-            
-            print(f"Sercan model upload sucesfully!")
-            print(f"   Model tipi: {type(self.model).__name__}")
-            
-            if hasattr(self.model, 'n_estimators'):
-                print(f" N estimators: {self.model.n_estimators}")
-            if hasattr(self.model, 'max_depth'):
-                print(f" Max depth: {self.model.max_depth}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"Sercan model upload error: {e}")
-            self.model = None
-            self.is_loaded = False
-            return False
-    def _load_scaler(self):
+        self._load_model(model_path)
         
-        if self.scaler_path and os.path.exists(self.scaler_path):
-            try:
-                self.scaler = joblib.load(self.scaler_path)
-                print("Sercan scaler loaded successfully!")
-            except Exception as e:
-                print(f"Scaler loading failed: {e}")
-                self.scaler = None
-        else:
-            print("Scaler path not found, will use default normalization")
+    def _load_model(self, folder_name="model_files"):
+        """Kaydedilen modelleri yükle"""
+        print(f"📂 Modeller yükleniyor... ({folder_name}/)")
+
+        try:
+            # Model 1
+            with open(f"{folder_name}/model_1_main_classifier.pkl", 'rb') as f:
+                self.model_blood_donor_vs_non_donor = pickle.load(f)
+            print("Model 1 yüklendi")
+
+            # Model 2A
+            with open(f"{folder_name}/model_2A_donor_subclass.pkl", 'rb') as f:
+                self.model_suspect_vs_true_donor = pickle.load(f)
+            print("Model 2A yüklendi")
+
+            # Model 2B
+            with open(f"{folder_name}/model_2B_nondonor_subclass.pkl", 'rb') as f:
+                self.model_non_donor_sub_classification = pickle.load(f)
+            print("Model 2B yüklendi")
+
+            # Label Encoder 2B
+            with open(f"{folder_name}/label_encoder_2B.pkl", 'rb') as f:
+                self.label_encoder_2B = pickle.load(f)
+            print("Label Encoder 2B yüklendi")
+
+            # Mapping
+            with open(f"{folder_name}/mapping_2A.pkl", 'rb') as f:
+                self.mapping_2A = pickle.load(f)
+            print("Mapping 2A yüklendi")
+
+            self.is_trained = True
+            print("Tüm modeller başarıyla yüklendi!")
+            self.is_loaded=True
+            return True
+        except FileNotFoundError as e:
+            print(f"Dosya bulunamadı: {e}")
+            return False
+        except Exception as e:
+            print(f"Yükleme hatası: {e}")
+            return False
+    
     def feature_extraction(self, X):
      
-        print("Feature extraction (training pipeline match)...")
-        df = X.copy()
-        
-        print("Applying pd.get_dummies...")
-        df = pd.get_dummies(df)
-        print(f"After get_dummies: {df.shape}")
-        
-        try:
-            alt_cols = ['ALT 1', 'ALT4', 'ALT 12', 'ALT 24', 'ALT 36', 'ALT 48']
-            alt_weeks = [1, 4, 12, 24, 36, 48]
-
-            if all(col in df.columns for col in alt_cols):
-                print("Creating ALT temporal features (exact training match)...")
-                
-                df['ALT_diff_1_4'] = df['ALT4'] - df['ALT 1']
-                df['ALT_diff_4_12'] = df['ALT 12'] - df['ALT4']
-                df['ALT_diff_12_24'] = df['ALT 24'] - df['ALT 12']
-                df['ALT_diff_24_48'] = df['ALT 48'] - df['ALT 24']
-                df['ALT_diff_1_48'] = df['ALT 48'] - df['ALT 1']
-                
-                df['ALT_ratio_48_1'] = df['ALT 48'] / (df['ALT 1'] + 1e-5)
-                
-                df['ALT_mean'] = df[alt_cols].mean(axis=1)
-                df['ALT_std'] = df[alt_cols].std(axis=1)
-                df['ALT_min'] = df[alt_cols].min(axis=1)
-                df['ALT_max'] = df[alt_cols].max(axis=1)
-                df['ALT_range'] = df['ALT_max'] - df['ALT_min']
-                df['ALT_skew'] = df[alt_cols].apply(skew, axis=1)
-                df['ALT_kurtosis'] = df[alt_cols].apply(kurtosis, axis=1)
-                
-                def calc_trend(row, columns, weeks):
-                    y = row[columns].values
-                    X_array = np.array(weeks).reshape(-1, 1)
-                    if np.isnan(y).any():
-                        return np.nan
-                    reg = LinearRegression().fit(X_array, y)
-                    return reg.coef_[0]
-                
-                df['ALT_slope'] = df.apply(lambda row: calc_trend(row, alt_cols, alt_weeks), axis=1)
-                
-                print(f"ALT features created: {len([c for c in df.columns if 'ALT_' in c])}")
-            else:
-                print("Missing ALT columns, skipping ALT features")
-
-            rna_cols = ['RNA Base', 'RNA 4', 'RNA 12', 'RNA EOT']
-            rna_weeks = [0, 4, 12, 24]
-            
-            if all(col in df.columns for col in rna_cols):
-                print("Creating RNA temporal features (exact training match)...")
-                
-                df['RNA_diff_4_base'] = df['RNA 4'] - df['RNA Base']
-                df['RNA_diff_12_4'] = df['RNA 12'] - df['RNA 4']
-                df['RNA_diff_EOT_12'] = df['RNA EOT'] - df['RNA 12']
-                
-                df['RNA_log_change_4'] = np.log1p(df['RNA 4']) - np.log1p(df['RNA Base'])
-                df['RNA_log_change_12'] = np.log1p(df['RNA 12']) - np.log1p(df['RNA 4'])
-                df['RNA_log_change_EOT'] = np.log1p(df['RNA EOT']) - np.log1p(df['RNA 12'])
-                
-                df['RNA_mean'] = df[rna_cols].mean(axis=1)
-                df['RNA_std'] = df[rna_cols].std(axis=1)
-                df['RNA_max'] = df[rna_cols].max(axis=1)
-                df['RNA_min'] = df[rna_cols].min(axis=1)
-                df['RNA_range'] = df['RNA_max'] - df['RNA_min']
-                df['RNA_skew'] = df[rna_cols].apply(skew, axis=1)
-                df['RNA_kurtosis'] = df[rna_cols].apply(kurtosis, axis=1)
-                
-                def calc_rna_trend(row, columns, weeks):
-                    y = row[columns].values
-                    X_array = np.array(weeks).reshape(-1, 1)
-                    if np.isnan(y).any():
-                        return np.nan
-                    reg = LinearRegression().fit(X_array, y)
-                    return reg.coef_[0]
-                
-                df['RNA_slope'] = df.apply(lambda row: calc_rna_trend(row, rna_cols, rna_weeks), axis=1)
-                
-                print(f"RNA features created: {len([c for c in df.columns if 'RNA_' in c])}")
-            else:
-                print("Missing RNA columns, skipping RNA features")
-                
-        except Exception as e:
-            print(f"Feature extraction error: {e}")
-        
-        print(f"Feature extraction completed! Shape: {df.shape}")
-        return df
-
-    def _calc_trend(self, row, columns, weeks):
-        
-        try:
-            available_data = []
-            available_weeks = []
-            
-            for col, week in zip(columns, weeks):
-                if col in row.index and not pd.isna(row[col]):
-                    available_data.append(row[col])
-                    available_weeks.append(week)
-            
-            if len(available_data) < 2:
-                return np.nan
-            
-            y = np.array(available_data)
-            X = np.array(available_weeks).reshape(-1, 1)
-            
-            reg = LinearRegression().fit(X, y)
-            return reg.coef_[0]
-            
-        except Exception as e:
-            return np.nan
-        
+        return X
 
     def feature_reduction(self, X):
         print("Feature reduction (exact training match)...")
-    
-        columns_to_drop = [
-            'ALT 1', 'ALT 12', 'ALT 24', 'ALT 36', 'ALT 48', 
-            'ALT after 24 w', 'ALT4', 'RNA 12', 'RNA 4', 
-            'RNA Base', 'RNA EF', 'RNA EOT'
-        ]
-        
-        existing_columns = [col for col in columns_to_drop if col in X.columns]
-        
-        if existing_columns:
-            X.drop(columns=existing_columns, inplace=True)
-            print(f"Dropped {len(existing_columns)} columns: {existing_columns}")
+        X=X[['ALB', 'CHE', 'ALP', 'Age', 'BIL', 'ALT', 'CHOL', 'PROT','AST','GGT']]
         
         print(f"After feature reduction: {X.shape}")
         return X
-     
-    def normalization(self, X):
-        print("Normalization (column order fix)...")
+    def filter_outliers(self,X):
+        outlier_bounds = {
+        'Age': {'lower': 16.5000, 'upper': 76.5000},
+        'ALB': {'lower': 29.2000, 'upper': 54.8000},
+        'ALP': {'lower': 9.9750, 'upper': 122.5750},
+        'ALT': {'lower': -8.5750, 'upper': 58.0250},
+        'AST': {'lower': 4.6500, 'upper': 49.8500},
+        'BIL': {'lower': -3.5500, 'upper': 20.0500},
+        'CHE': {'lower': 2.9525, 'upper': 13.5725},
+        'CHOL': {'lower': 2.4300, 'upper': 8.2300},
+        'CREA': {'lower': 35.5000, 'upper': 119.5000},
+        'GGT': {'lower': -21.0500, 'upper': 76.9500},
+        'PROT': {'lower': 60.1500, 'upper': 84.5500}
+    }
+    
+        print("Outlier filtreleme başlıyor...")
+        X_filtered = X.copy()
         
-        if self.scaler is not None:
-            try:
-                cleaned_columns = [col.strip() for col in X.columns]
-                X.columns = cleaned_columns
+        # Her feature için winsorization uygula
+        for feature, bounds in outlier_bounds.items():
+            if feature in X_filtered.columns:
+                lower = bounds['lower']
+                upper = bounds['upper']
                 
-                if hasattr(self.model, 'feature_names_in_'):
-                    expected_order = list(self.model.feature_names_in_)
-                    current_columns = list(X.columns)
-                    
-                    print(f"Current order: {current_columns[:3]}...")
-                    print(f"Expected order: {expected_order[:3]}...")
-                    
-                    if set(current_columns) == set(expected_order):
-                        print("All columns present, reordering...")
-                        X = X[expected_order] 
-                        print(f"Reordered to: {list(X.columns[:3])}...")
-                    else:
-                        print("Column sets don't match exactly")
-                        available_expected = [col for col in expected_order if col in current_columns]
-                        X = X[available_expected]
-                        print(f"Using available columns: {len(available_expected)}/{len(expected_order)}")
+                # Outlier sayısını say (isteğe bağlı)
+                outliers_below = (X_filtered[feature] < lower).sum()
+                outliers_above = (X_filtered[feature] > upper).sum()
+                total_outliers = outliers_below + outliers_above
                 
-                numeric_columns = X.columns.difference(self.categorical_columns).tolist()
-                print(f"Numeric: {len(numeric_columns)}, Categorical: {len(self.categorical_columns)}")
+                if total_outliers > 0:
+                    print(f"  {feature}: {total_outliers} outlier bulundu "
+                        f"(alt: {outliers_below}, üst: {outliers_above})")
                 
-                X_scaled = X.copy()
-                if numeric_columns:
-                    X_scaled[numeric_columns] = self.scaler.transform(X[numeric_columns])
-                    print("Scaler applied!")
-                
-                return X_scaled
-                
-            except Exception as e:
-                print(f"Error: {e}")
-                return X
-        else:
-            print("No scaler!")
-            return X
-
-    def simple_reorder_columns(self, X):
-        """Sadece sütun sıralaması düzelt"""
-        if hasattr(self.model, 'feature_names_in_'):
-            expected_order = list(self.model.feature_names_in_)
-            
-            if all(col in X.columns for col in expected_order):
-                print(f"Reordering {len(expected_order)} columns to match model...")
-                X_reordered = X[expected_order]
-                print("Column order fixed!")
-                return X_reordered
+                # Winsorization uygula
+                X_filtered[feature] = np.where(
+                    X_filtered[feature] < lower, 
+                    lower, 
+                    X_filtered[feature]
+                )
+                X_filtered[feature] = np.where(
+                    X_filtered[feature] > upper, 
+                    upper, 
+                    X_filtered[feature]
+                )
             else:
-                print("Some expected columns missing")
-                return X
-        else:
-            print("No expected column order available")
+                print(f"  ⚠️ {feature} sütunu bulunamadı, atlanıyor...")
+        
+        print(f"Outlier filtreleme tamamlandı. Shape: {X_filtered.shape}")
+        return X_filtered
+
+    def normalization(self, X):
             return X
 
-    
-
-    
 
     def validate_input(self, X):
     
@@ -265,14 +131,7 @@ class SercanModel(BaseModel):
             return False
         original_columns = list(X.columns)
         cleaned_columns = [col.strip() for col in X.columns]
-        expected_columns = [
-            'Age', 'Gender', 'BMI', 'Fever', 'Nausea/Vomting', 'Headache', 
-            'Diarrhea', 'Fatigue & generalized bone ache', 'Jaundice', 
-            'Epigastric pain', 'WBC', 'RBC', 'HGB', 'Plat', 'AST 1', 
-            'ALT 1', 'ALT4', 'ALT 12', 'ALT 24', 'ALT 36', 'ALT 48', 
-            'ALT after 24 w', 'RNA Base', 'RNA 4', 'RNA 12', 'RNA EOT', 
-            'RNA EF', 'Baseline histological Grading'
-        ]
+        expected_columns = ['ALB', 'CHE', 'ALP', 'Age', 'BIL', 'ALT', 'CHOL', 'PROT','AST','GGT']
 
         missing_columns = [col for col in expected_columns if col not in cleaned_columns]
 
@@ -286,47 +145,128 @@ class SercanModel(BaseModel):
     def data_cleaning(self, X):
         return super().data_cleaning(X)
     
+    def predict(self, X):
+        
+        if not self.is_trained:
+            raise RuntimeError("Model henüz eğitilmedi. Lütfen önce `fit` metodunu çağırın.")
+
+        import pandas as pd
+        if isinstance(X, pd.DataFrame): X = X.values
+
+        print(f"🔍 Debug: Tahmin başlıyor - {X.shape[0]} örnek")
+
+        # 1. Aşama
+        level1_preds = self.model_blood_donor_vs_non_donor.predict(X)
+        final_predictions = np.zeros_like(level1_preds, dtype=int)
+
+        print(f"Level 1 tahminleri: {np.bincount(level1_preds)}")
+
+        # 2. Aşama
+        donor_mask = (level1_preds == 0)
+        non_donor_mask = (level1_preds == 1)
+
+        if np.any(donor_mask):
+            preds_2A = self.model_suspect_vs_true_donor.predict(X[donor_mask])
+            final_predictions[donor_mask] = np.vectorize(self.mapping_2A.get)(preds_2A)
+            print(f"Model 2A tahminleri: {np.bincount(preds_2A)} -> Final: {np.bincount(final_predictions[donor_mask])}")
+
+        if np.any(non_donor_mask):
+            preds_2B_encoded = self.model_non_donor_sub_classification.predict(X[non_donor_mask])
+            preds_2B_decoded = self.label_encoder_2B.inverse_transform(preds_2B_encoded)
+            final_predictions[non_donor_mask] = preds_2B_decoded
+
+            print(f"Model 2B encoded tahminleri: {np.bincount(preds_2B_encoded)}")
+            print(f"Model 2B decoded tahminleri: {np.bincount(preds_2B_decoded)}")
+            print(f"LabelEncoder classes_: {self.label_encoder_2B.classes_}")
+            print(f"Mapping: {dict(zip(range(len(self.label_encoder_2B.classes_)), self.label_encoder_2B.classes_))}")
+
+        print(f"Final tahmin dağılımı: {np.bincount(final_predictions)}")
+
+        return final_predictions
     def prediction(self, X, **kwargs):
         if not self.is_loaded:
             raise ValueError("Model not loaded! Use load_model() first.")
         
         print("Sercan's Prediction Pipeline Starting...")
 
-        if 'Baselinehistological staging' not in X.columns:
-            raise ValueError("Target column 'Baselinehistological staging' not found in input!")
-        self.target_column = "Baselinehistological staging"
-        self.y = X['Baselinehistological staging'].apply(lambda x: 0 if x in [1, 2] else 1).values
-        X = X.drop(columns=['Baselinehistological staging']) 
+        if 'Category'  in X.columns:
+            
+            self.target_column = "Category"
+            self.y = X['Category']
+            X = X.drop(columns=['Category']) 
 
         if not self.validate_input(X):
             raise ValueError("Input validation failed!")
 
         X_cleaned = self.data_cleaning(X)
+        X_filtered = self.filter_outliers(X_cleaned)  # BURAYA EKLEYİN
         X_features = self.feature_extraction(X_cleaned)
+        
         X_reduced = self.feature_reduction(X_features)
         X_normalized = self.normalization(X_reduced)
 
         print("Making predictions...")
-        raw_predictions = self.model.predict(X_normalized, **kwargs)
+        raw_predictions = self.predict(X_normalized)
         print("Predictions completed.")
 
         return raw_predictions
     
     def postprocess_output(self, predictions):
         print("Postprocessing output...")
-
         if predictions.ndim > 1 and predictions.shape[1] > 1:
             final_preds = np.argmax(predictions, axis=1)
         else:
             final_preds = predictions.ravel().astype(int)
-
+        
         if hasattr(self, "y") and self.y is not None:
             try:
-                print("Evaluation Results (from postprocess_output):")
-                print("Accuracy:", accuracy_score(self.y, final_preds))
-                print("Confusion Matrix:\n", confusion_matrix(self.y, final_preds))
-                print("Classification Report:\n", classification_report(self.y, final_preds))
+                # String etiketleri integer'a dönüştür
+                label_mapping = {
+                    '0=Blood Donor': 0,
+                    '0s=suspect Blood Donor': 4,
+                    '1=Hepatitis': 1,
+                    '2=Fibrosis': 2,
+                    '3=Cirrhosis': 3
+                }
+                
+                # self.y'yi DEĞİŞTİRME! Kopya oluştur
+                y_true_encoded = []
+                for label in self.y:
+                    if label in label_mapping:
+                        y_true_encoded.append(label_mapping[label])
+                    else:
+                        print(f"Bilinmeyen etiket: {label}")
+                        y_true_encoded.append(-1)
+                
+                y_true_encoded = np.array(y_true_encoded)
+                
+                # Sadece geçerli etiketleri değerlendir
+                valid_mask = y_true_encoded != -1
+                if np.any(valid_mask):
+                    y_true_valid = y_true_encoded[valid_mask]
+                    final_preds_valid = final_preds[valid_mask]
+                    
+                    accuracy = accuracy_score(y_true_valid, final_preds_valid)
+                    
+                    print("=== POSTPROCESS_OUTPUT DEBUG ===")
+                    print(f"self.y tipi: {type(self.y)}")
+                    print(f"self.y ilk 3: {self.y[:3]}")
+                    print(f"y_true_encoded: {y_true_encoded}")
+                    print(f"final_preds: {final_preds}")
+                    print(f"Accuracy hesaplandı: {accuracy}")
+                    
+                    self.last_accuracy = accuracy
+                    
+                    print("Evaluation Results (from postprocess_output):")
+                    print("Accuracy:", accuracy)
+                    print("Confusion Matrix:\n", confusion_matrix(y_true_valid, final_preds_valid))
+                    print("Classification Report:\n", classification_report(y_true_valid, final_preds_valid))
+                else:
+                    print("Geçerli etiket bulunamadı!")
+                    self.last_accuracy = None
+                    
             except Exception as e:
                 print(f"Evaluation error in postprocess_output: {e}")
-
+                self.last_accuracy = None
+        
         return final_preds

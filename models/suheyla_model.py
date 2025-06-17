@@ -1,4 +1,3 @@
-# Sercan modeli
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
@@ -117,7 +116,8 @@ class SuheylaModel(BaseModel):
             '0=Blood Donor': 0,
             '1=Hepatitis': 1,
             '2=Fibrosis': 2,
-            '3=Cirrhosis': 3
+            '3=Cirrhosis': 3,
+            '0s=suspect Blood Donor': 4,  # Bu satır eksikti!
         }
 
         # Tahminler sayısal mı string mi kontrol et
